@@ -1,6 +1,6 @@
 require 'open-uri'
 require 'json'
-require 'io/console'
+require 'curses'
 
 class Redditor
   attr_reader :subreddits, :urls, :audio_sources
@@ -34,28 +34,32 @@ class Redditor
 end
 
 class Jukebox
-  attr_reader :playlist, :cache_path, :pid_id, :track_index
+  attr_reader :playlist, :cache_path, :pid_id, :track_index, :terminal
 
   def initialize(playlist,cache_path)
     @playlist = playlist
     @cache_path = cache_path
     @track_index = 0
     @pid_id = 0
+    @terminal = Terminal_Controller.new()
   end
 
   def play()
-    puts "Found #{@playlist.length()} tracks. Let's jam!"
+    terminal.write("Found #{@playlist.length()} tracks. Let's jam!")
     @playlist.each do |track|
       @track_index += 1
       clobber_cache()
       
-      puts "Grabbing #{track[:url]}..."
+      terminal.write("Grabbing #{track[:url]}...")
       `youtube-dl -x \"#{track[:url]}\" -q -o \"#{@cache_path}/current_track.%(ext)s\"`
 
-      puts "Download complete, now playing track \##{@track_index}: #{track[:title]}"
-      puts "Press 'n' for next track\n\n"
-      @pid_id = fork {exec "mplayer -really-quiet .cache/current_track.*" }
-      listen()
+      terminal.write("Download complete, now playing track \##{@track_index}: #{track[:title]}")
+      terminal.write("Press 'n' for next track, CTRL+C to exit.")
+      terminal.write("\n")
+      unless File.exist?("#{@cache_path}/current_track.*")
+        @pid_id = fork { exec "mplayer -really-quiet .cache/current_track.*"}
+        listen()
+      end
     end
     @track_index = 0
     clobber_cache()
@@ -63,18 +67,20 @@ class Jukebox
 
   def listen()
     sys_monitor = System_Monitor.new(@pid_id)
-    get_keystrokes(sys_monitor)
-  end
-
-  def get_keystrokes(sys_monitor)
     while sys_monitor.mplayer_alive()
-      puts "alive"
-      system("stty -raw echo")
-      str = STDIN.getc
-      if str == "n"
-        sys_monitor.kill_process()
-        return
-      end    
+       input = terminal.handle_key()
+
+       #Catch next track key
+       if input == "n"
+         sys_monitor.kill_process()
+         break
+       end
+       #Catch a CTRL+C
+       if input == 3
+         sys_monitor.kill_process()
+         exit
+       end
+
     end
   end
 
@@ -97,19 +103,43 @@ class System_Monitor
 
   def mplayer_alive()
     begin
-      Process.kill(0, get_child())
-      true
+      if Process.kill(0, @pid_id) or Process.kill(0, @child_pid)
+        return true
+      end
+        return false
     rescue Errno::ESRCH
-      false
-    ensure
       false
     end
   end
 
   def kill_process()
-    if mplayer_alive()
+      get_child()
       Process.kill(1,@child_pid)
-    end
+  end
+end
+
+class Terminal_Controller
+  attr_reader :index, :main_window
+
+  def initialize()
+    @index = 0
+    Curses.noecho
+    Curses.raw
+    Curses.nonl
+    Curses.stdscr.nodelay = 1
+    Curses.init_screen
+    @main_window = Curses::Window.new(0,0,0,0)
+  end
+
+  def write(in_string)
+    @main_window.setpos(@index, 0)
+    @main_window.addstr(in_string)
+    @main_window.refresh
+    @index += 1
+  end
+
+  def handle_key()
+    return main_window.getch
   end
 end
 
