@@ -2,6 +2,8 @@ require 'open-uri'
 require 'json'
 require 'curses'
 
+##Retrieves and parses JSON from subreddits.
+##Adds relevant results to an array of hashes like urls=[{title,url}...]
 class Redditor
   attr_reader :subreddits, :urls, :audio_sources
 
@@ -33,6 +35,9 @@ class Redditor
   end
 end
 
+##Acts as player for urls. Downloads audio files from corresponding videos
+##...and once downloaded, passes control to mplayer to play it.
+##Also handles next track and application closing functionality.
 class Jukebox
   attr_reader :playlist, :cache_path, :pid_id, :track_index, :terminal
 
@@ -45,19 +50,18 @@ class Jukebox
   end
 
   def play()
-    terminal.write("Found #{@playlist.length()} tracks. Let's jam!")
+    @terminal.write("Found #{@playlist.length()} tracks. Let's jam!")
     @playlist.each do |track|
       @track_index += 1
       clobber_cache()
       
-      terminal.write("Grabbing #{track[:url]}...")
+      @terminal.write("Grabbing #{track[:url]}...")
       `youtube-dl -x \"#{track[:url]}\" -q -o \"#{@cache_path}/current_track.%(ext)s\"`
 
-      terminal.write("Download complete, now playing track \##{@track_index}: #{track[:title]}")
-      terminal.write("Press 'n' for next track, CTRL+C to exit.")
-      terminal.write("\n")
+      @terminal.write("Download complete, now playing track \##{@track_index}: #{track[:title]}")
+      @terminal.write("Press 'n' for next track, CTRL+C to exit.")
+      @terminal.write("\n")
       unless File.exist?("#{@cache_path}/current_track.*")
-        @pid_id = fork { exec "mplayer -really-quiet .cache/current_track.*"}
         listen()
       end
     end
@@ -66,58 +70,58 @@ class Jukebox
   end
 
   def listen()
-    sys_monitor = System_Monitor.new(@pid_id)
-    while sys_monitor.mplayer_alive()
-       input = terminal.handle_key()
+    mplayer = Mplayer.new(@cache_path)
 
+    while mplayer.alive() do
+       input = @terminal.handle_key()
        #Catch next track key
        if input == "n"
-         sys_monitor.kill_process()
-         break
+         mplayer.die()
+         clobber_cache()
        end
        #Catch a CTRL+C
        if input == 3
-         sys_monitor.kill_process()
+         mplayer.die()
+         clobber_cache()
          exit
        end
-
     end
   end
 
+  #Destroy cached files we made
   def clobber_cache()
     FileUtils.rm Dir["#{@cache_path}/current_track.*"]
   end
 end
 
-class System_Monitor
-  attr_reader :pid_id, :child_pid
+##Actually launches mplayer and return info about whether its process still exists
+class Mplayer
+  attr_reader :pid, :child_pid, :cache_path
 
-  def initialize(pid_id)
-    @pid_id = pid_id
-    @child_pid = 0
+  def initialize(cache_path)
+    @cache_path = cache_path
+    @pid = Process.spawn("mplayer -really-quiet #{@cache_path}/current_track.*")
+    @child_pid = `pgrep -P #{@pid}`.to_i
   end
 
-  def get_child()
-    @child_pid = `pgrep -P #{@pid_id}`.to_i
-  end
-
-  def mplayer_alive()
+  def alive()
     begin
-      if Process.kill(0, @pid_id) or Process.kill(0, @child_pid)
+      if Process.waitpid(@pid, Process::WNOHANG) == nil
         return true
       end
         return false
-    rescue Errno::ESRCH
-      false
+    rescue Errno::ECHILD
+      return false
     end
   end
 
-  def kill_process()
-      get_child()
-      Process.kill(1,@child_pid)
+  def die()
+    Process.kill(1,@child_pid.to_i)
+    Process.kill(1,@pid.to_i)
   end
 end
 
+##Handles curses options and functionality for writing to screen
 class Terminal_Controller
   attr_reader :index, :main_window
 
@@ -126,9 +130,9 @@ class Terminal_Controller
     Curses.noecho
     Curses.raw
     Curses.nonl
-    Curses.stdscr.nodelay = 1
     Curses.init_screen
     @main_window = Curses::Window.new(0,0,0,0)
+    @main_window.timeout = 0
   end
 
   def write(in_string)
@@ -143,7 +147,9 @@ class Terminal_Controller
   end
 end
 
+##Create a new redditor and retrieve results from hood subreddits.
 redditor = Redditor.new(["trapmuzik","hiphopheads","trap"],["soundcloud","youtube"])
 redditor.get_urls_from_sub()
+##Play results
 juke = Jukebox.new(redditor.urls,".cache")
 juke.play()
