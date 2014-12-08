@@ -5,7 +5,7 @@ require 'curses'
 ##Retrieves and parses JSON from subreddits.
 ##Adds relevant results to an array of hashes like urls=[{title,url}...]
 class Redditor
-  attr_reader :subreddits, :urls, :audio_sources
+  attr_reader :urls
 
   def initialize(subreddits,audio_sources)
     @subreddits = subreddits
@@ -39,7 +39,6 @@ end
 ##...and once downloaded, passes control to mplayer to play it.
 ##Also handles next track and application closing functionality.
 class Jukebox
-  attr_reader :playlist, :cache_path, :pid_id, :track_index, :terminal
 
   def initialize(playlist,cache_path)
     @playlist = playlist
@@ -96,7 +95,6 @@ end
 
 ##Actually launches mplayer and return info about whether its process still exists
 class Mplayer
-  attr_reader :pid, :child_pid, :cache_path
 
   def initialize(cache_path)
     @cache_path = cache_path
@@ -123,7 +121,6 @@ end
 
 ##Handles curses options and functionality for writing to screen
 class Terminal_Controller
-  attr_reader :index, :main_window
 
   def initialize()
     @index = 0
