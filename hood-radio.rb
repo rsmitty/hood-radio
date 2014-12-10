@@ -75,7 +75,6 @@ class Jukebox
        input = @terminal.handle_key()
        #Catch next track key
        if input == "n"
-         @terminal.clear()
          mplayer.die()
          clobber_cache()
        end
@@ -86,6 +85,7 @@ class Jukebox
          exit
        end
     end
+    @terminal.clear()
   end
 
   #Destroy cached files we made
