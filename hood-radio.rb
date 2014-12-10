@@ -75,6 +75,7 @@ class Jukebox
        input = @terminal.handle_key()
        #Catch next track key
        if input == "n"
+         @terminal.clear()
          mplayer.die()
          clobber_cache()
        end
@@ -137,6 +138,13 @@ class Terminal_Controller
     @main_window.addstr(in_string)
     @main_window.refresh
     @index += 1
+  end
+
+  def clear()
+    @main_window.clear
+    @main_window.setpos(@index, 0)
+    @main_window.refresh
+    @index = 0
   end
 
   def handle_key()
