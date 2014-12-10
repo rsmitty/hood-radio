@@ -140,7 +140,7 @@ class Terminal_Controller
   end
 
   def handle_key()
-    return main_window.getch
+    return @main_window.getch
   end
 end
 
