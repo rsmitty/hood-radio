@@ -115,7 +115,7 @@ class Mplayer
   end
 
   def die()
-    Process.kill(1,@child_pid.to_i)
+    #Process.kill(1,@child_pid.to_i)
     Process.kill(1,@pid.to_i)
   end
 end
